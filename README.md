@@ -10,5 +10,5 @@ To run the project
 ==================
 
 ```
->>> streamlit -run task2.py
+streamlit -run task2.py
 ```
