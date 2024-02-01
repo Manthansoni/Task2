@@ -16,7 +16,7 @@ import streamlit as st
 import pandas as pd
 from typing import Optional
 import sqlalchemy
-from sqlalchemy import create_engine, text, inspect, MetaData, select, Table, String, insert
+from sqlalchemy import create_engine, text, inspect, MetaData, select, Table, String, insert, delete
 from sqlalchemy.schema import DropTable
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 import matplotlib.pyplot as plt
@@ -27,6 +27,7 @@ conn = engine.connect()
 
 
 class Base(DeclarativeBase):
+    '''Base Class'''
     pass
 
 
@@ -55,23 +56,21 @@ class Main():
     values = {}
 
     def __init__(self):
+        '''init function'''
         pass
 
+    # Tab3,4,5
     def tables_name(self):
+        '''it will fetch table name. Used in tab3,4,5'''
         inspector = inspect(engine)
-        tablename = inspector.get_table_names()
-        tablename.remove("metrics_output")
-        return tablename
+        tablename1 = inspector.get_table_names()
+        tablename1.remove("metrics_output")
+        return tablename1
 
-    def get_table_data(self, tablename):
-        metadata = MetaData()
-        table = Table(tablename, metadata, autoload_with=engine)
-        stmt = select(table)
-        result = conn.execute(stmt)
-        data = pd.DataFrame(result)
-        return data
+    # Tab1
 
     def create_columns(self, name, cols):
+        '''For Column Datatypes Dropdown. Used in Tab1'''
         with st.form(key='hello', clear_on_submit=True):
             name_container, datatpe_container = st.columns(2)
             fields = [name_container.text_input(
@@ -85,7 +84,10 @@ class Main():
                 return fields, fieldsDatatpe
 
     def table_insert_data(self, name, data, columns):
+        '''It will insert the data to Database. Used in Tab1'''
         dataframe = pd.DataFrame(columns=data)
+        str1 = dataframe.columns
+        str1[0]
         # dataframe = dataframe[dataframe.columns[0:]]
         # columns.pop('#')
 
@@ -105,23 +107,28 @@ class Main():
         # sql insert
         try:
             fetch = dataframe.to_sql(
-                name, conn, if_exists='replace', dtype=columns)
+                name, conn, if_exists='replace', dtype=columns, index=False)
+            conn.execute(
+                text(f'ALTER TABLE `{name}` ADD PRIMARY KEY (`{str1[0]}`);'))
         except Exception as vx:
             st.write(str(vx))
 
         return "Inserted Successfully"
 
+    # Tab2
     def read_file(self, file):
-        '''read the fle uploaded'''
+        '''read the fle uploaded. Used in Tab2'''
         filename = file.name.split(".")
         self._filen = filename[0]
         data = pd.read_csv(file)
         dataframe = pd.DataFrame(data)
-
+        df2 = dataframe.to_string(index=False)
+        df2 = dataframe.style.hide()
+        # st.write(df2)
         return dataframe
 
     def column_types(self, dataframe1):
-        '''Get column types'''
+        '''Get column types. Used in Tab2'''
         column_data = dataframe1.columns
         for column in column_data:
             st.write(f"{column}")
@@ -132,8 +139,11 @@ class Main():
         return self.columns
 
     def insert_data(self, dataframe, columns):
+        '''Used to insert csv data. Used in Tab2'''
+
         # dataframe = dataframe[dataframe.columns[1:]]
         # columns.pop('#')
+
         for key in columns.keys():
             if columns[key] == "int":
                 columns[key] = sqlalchemy.types.INTEGER()
@@ -156,8 +166,9 @@ class Main():
         except Exception as vx:
             st.write(str(vx))
 
+    # Tab3
     def metrics_details(self, dataframe):
-        '''metrics calculation'''
+        '''metrics calculation. used in Tab3'''
         standard_deviation = {}
         metrics_data = {}
         tab1, tab2, tab3, tab4 = st.tabs(
@@ -223,6 +234,7 @@ class Main():
         return metrics_data
 
     def metrics_upload(self, tablename, datadict):
+        # '''upload the metrics data to database. used in Tab3'''
         rowcount = float(datadict['row_count'])
         columncount = float(datadict['column_count'])
         duplicaterows = float(datadict['duplicated_data'])
@@ -236,42 +248,67 @@ class Main():
         session.commit()
         return "Inserted Successfully"
 
-    def crud_get_col(self, data, dtype):
+    def get_table_data(self, tablename1):
+        '''It will fetch the table data. Used in Tab3'''
+        metadata = MetaData()
+        table = Table(tablename1, metadata, autoload_with=engine)
+        stmt = select(table)
+        result1 = conn.execute(stmt)
+        data1 = pd.DataFrame(result1)
+        return data1
+
+    # Tab4
+
+    def crud_get_col(self, data, dtype, operation):
+
         dict = {}
         for item in data:
+            str1 = str(operation+item)
             if "INTEGER" in str(dtype[item]):
-                value = st.number_input(f'Enter {item}', key=item)
+                value = st.number_input(f'Enter {item}', key=str1)
             elif "BIGINT" in str(dtype[item]):
-                value = st.number_input(f'Enter {item}', key=item)
+                value = st.number_input(f'Enter {item}', key=str1)
             else:
-                value = st.text_input(f'Enter {item}', key=item)
+                value = st.text_input(f'Enter {item}', key=str1)
             dict[item] = value
 
             # self.values[item] = option
         return dict
 
-    def crud_insert_table(self, values, tablename):
-        colname = []
-        value = []
-        for i in values.keys():
-            colname.append(i)
-            value.append(values[i])
-        st.write(value)
+    def crud_get_col_del(self, data):
+        value = st.number_input(f'Enter {data[0]}', key=data[0])
+        return value
 
-        # stmt = (
-        #     tablename.insert().values([{'item' : item} for item in colname])
-        # )
+    def crud_insert_table(self, values, tablename):
+
         columns = ', '.join("`" + str(x).replace('/', '_') +
                             "`" for x in values.keys())
         value = ', '.join("'" + str(x).replace('/', '_') +
                           "'" for x in values.values())
         sql = "INSERT INTO %s ( %s ) VALUES ( %s );" % (
             tablename, columns, value)
-        conn.execute(text(sql))
-        conn.commit()
+        try:
+            qry = conn.execute(text(sql))
+            conn.commit()
+            return "Inserted Successfully"
+        except Exception as er:
+            return str(er)
 
         # result = conn.execute(insert(tablename), [values])
         # conn.commit()
+
+    def crud_update_table(self, val, tablename):
+        columns = ', '.join('{}="{}"'.format(k, v) for k, v in val.items())
+        first = columns.split(",")
+
+        sql = f'UPDATE {tablename} SET ' + columns + f' WHERE {first[0]}'
+
+        try:
+            conn.execute(text(sql))
+            conn.commit()
+            return "Updated Successfully"
+        except Exception as er:
+            return str(er)
 
 
 task = Main()
@@ -286,7 +323,6 @@ with tab1:
     cl = int(cols)
     if cl:
         data = task.create_columns(name, cl)
-        # st.write(data[1])
         if data:
             res = {}
             for key in data[0]:
@@ -294,7 +330,6 @@ with tab1:
                     res[key] = value
                     data[1].remove(value)
                     break
-            # st.write(res)
             result = task.table_insert_data(name, data[0], res)
             st.write(result)
 
@@ -347,10 +382,33 @@ with tab4:
             tabletypes[i["name"]] = i['type']
         for i in tablename:
             column_name.append(i["name"])
+
         with st.expander("Insert Data"):
-            result = task.crud_get_col(column_name, tabletypes)
+            result = task.crud_get_col(column_name, tabletypes, "insert")
             if st.button("Insert"):
                 st.write(task.crud_insert_table(result, t))
+
+        with st.expander("Update Data"):
+            result = task.crud_get_col(column_name, tabletypes, "update")
+            if st.button("Update"):
+                st.write(task.crud_update_table(result, t))
+
+        with st.expander("Delete Data"):
+            result = int(task.crud_get_col_del(column_name))
+            if st.button("Delete"):
+                colname = column_name[0]
+                sql = "DELETE FROM %s WHERE %s = %s;" % (t, colname, result)
+                stmt = conn.execute(text(sql))
+                conn.commit()
+                st.write()
+
+        with st.expander("View Data"):
+            t = Table(name, MetaData(),autoload_with=engine)
+            stmt = select(t)
+            results = conn.execute(stmt).fetchall()
+            dt = pd.DataFrame(results)
+            st.write(dt)
+            
 
 
 with tab5:
